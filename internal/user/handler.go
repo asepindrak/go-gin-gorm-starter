@@ -1,33 +1,84 @@
 package user
 
 import (
+	"net/http"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 )
 
-type Handler struct{ svc Service }
-
-func NewHandler(s Service) *Handler { return &Handler{svc: s} }
-
-type createReq struct {
-	Name  string `json:"name" binding:"required"`
-	Email string `json:"email" binding:"required,email"`
+type Handler struct {
+	service Service
 }
 
-type updateReq struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
-
-func (h *Handler) Register(r *gin.Engine) {
-	api := r.Group("/api/v1")
-	{
-		api.GET("/users", h.List)
-		api.POST("/users", h.Create)
-		api.GET("/users/:id", h.Get)
-		api.PUT("/users/:id", h.Update)
-		api.DELETE("/users/:id", h.Delete)
-	}
+func NewHandler(s Service) *Handler {
+	return &Handler{s}
 }
 
 func (h *Handler) Create(c *gin.Context) {
+	var input User
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	user, err := h.service.Create(input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, user)
+}
+
+func (h *Handler) List(c *gin.Context) {
+	users, err := h.service.List()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, users)
+}
+
+func (h *Handler) Get(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	user, err := h.service.Get(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, user)
+}
+
+func (h *Handler) Update(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var input User
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	user, err := h.service.Update(uint(id), input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, user)
+}
+
+func (h *Handler) Delete(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := h.service.Delete(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) Register(r *gin.Engine) {
+	v1 := r.Group("/api/v1/users")
+	{
+		v1.POST("", h.Create)
+		v1.GET("", h.List)
+		v1.GET("/:id", h.Get)
+		v1.PUT("/:id", h.Update)
+		v1.DELETE("/:id", h.Delete)
+	}
 }
